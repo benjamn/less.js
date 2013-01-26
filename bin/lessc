@@ -103,6 +103,9 @@ args = args.filter(function (arg) {
         case "relative-urls":
             options.relativeUrls = true;
             break;
+        case "commonjs":
+            options.commonJs = true;
+            break;
     }
 });
 
@@ -159,10 +162,34 @@ var parseLessFile = function (e, data) {
             return;
         } else if(!options.lint) {
             try {
+                var vars = {};
                 var css = tree.toCSS({
                     compress: options.compress,
-                    yuicompress: options.yuicompress
+                    yuicompress: options.yuicompress,
+                    variables: vars
                 });
+                if (options.commonJs) {
+                    var lines = [
+                        'var x=exports,d=document,s=d.createElement("style"),css=' +
+                            JSON.stringify(css.trim()) + ';',
+                        's.setAttribute("type","text/css");',
+                        'if(s.styleSheet)s.styleSheet.cssText=css;',
+                        'else s.appendChild(d.createTextNode(css));',
+                        'd.documentElement.firstChild.appendChild(s);'
+                    ];
+
+                    tree.rules.forEach(function(rule) {
+                        if (rule.variable === true) {
+                            var name = JSON.stringify(/^@?(.*)/.exec(rule.name)[1]);
+                            var value = JSON.stringify(vars[rule.name]);
+                            lines.push('x[' + name + ']=' + value + ';');
+                        }
+                    });
+
+                    lines.push("\n");
+
+                    css = lines.join("");
+                }
                 if (output) {
                     ensureDirectory(output);
                     fs.writeFileSync(output, css, 'utf8');
